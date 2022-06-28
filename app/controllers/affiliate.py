@@ -3,7 +3,7 @@ from app.database import Database, scale_container
 from app.schemas.affiliate import NewAffiliateInput, NewAffiliateOutput
 import web3
 import uuid
-from random import random
+import random
 import string
 
 router = APIRouter(
@@ -25,30 +25,30 @@ rewardLevels = [
 ]
 
 
-# def get_affiliate_item(address: str, parent_affiliate_id: str, affiliate_id: str):
-#     return {
-#         "affiliate_id": affiliate_id,
-#         "address": address,
-#         "parent_affiliate_id": parent_affiliate_id,
-#     }
+def get_affiliate_item(address: str, parent_affiliate_id: str, affiliate_id: str):
+    return {
+        "affiliate_id": affiliate_id,
+        "address": address,
+        "parent_affiliate_id": parent_affiliate_id,
+    }
 
 
 def get_random_id() -> str:
     chars = string.ascii_uppercase + string.digits
-    return "-".join("".jsoin(random.choice(chars) for _ in range(4)) for _ in range(4))
+    return "-".join("".join(random.choices(chars) for _ in range(4)) for __ in range(4))
 
 
-# for rewardLevel from rewardLevels:
-# if len(list(rewardLevelContainer.read_all_items())) == 0:
-#     for rewardLevel in rewardLevels:
-#         rewardLevelContainer.create_item(body=rewardLevel)
-# rewardLevels = list(rewardLevelContainer.read_all_items())
+if len(list(rewardLevelContainer.read_all_items())) == 0:
+    for rewardLevel in rewardLevels:
+        rewardLevelContainer.create_item(body=rewardLevel)
+
+rewardLevels = list(rewardLevelContainer.read_all_items())
 
 
 @router.post(
     "/",
     description="Create an affiliate ID along with an optional parent_affiliate_id parameter.",
-    return_model=NewAffiliateOutput,
+    response_model=NewAffiliateOutput,
 )
 async def new_affiliate(data: NewAffiliateInput):
     if data.parent_affiliate_id != None:

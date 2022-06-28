@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Query
 from app.database import Database, scale_container
 from app.schemas.affiliate import NewAffiliateInput, NewAffiliateOutput
+from azure.cosmos import exceptions as cosmos_exceptions
 import web3
 import uuid
 import random
@@ -51,15 +52,21 @@ rewardLevels = list(rewardLevelContainer.read_all_items())
     response_model=NewAffiliateOutput,
 )
 async def new_affiliate(data: NewAffiliateInput):
+    print(data)
     if data.parent_affiliate_id != None:
-        item = affiliateContainer.read_item(
-            item=data.parent_affiliate_id, partition_key=data.parent_affiliate_id
-        )
-
-        if item == None:
+        try:
+            item = affiliateContainer.read_item(
+                item=data.parent_affiliate_id, partition_key=data.parent_affiliate_id
+            )
+        except cosmos_exceptions.CosmosResourceNotFoundError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Parent affiliate doesn't exist",
+            )
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_ERROR,
+                detail="Something went wrong in server side",
             )
 
     new_affiliate_id = get_random_id()

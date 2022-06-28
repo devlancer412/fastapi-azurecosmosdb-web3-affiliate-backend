@@ -5,7 +5,7 @@ class NewAffiliateInput(BaseModel):
     address: str = Field(
         nullable=False, description="User wallet address", regex="0x[0-9a-zA-Z]{32}"
     )
-    parent_affiliate_id: str = Field(
+    parent_affiliate_id: str | None = Field(
         default=None,
         nullable=True,
         description="Parent id",

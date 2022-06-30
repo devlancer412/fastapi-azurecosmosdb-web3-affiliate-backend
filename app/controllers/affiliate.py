@@ -1,10 +1,11 @@
+from app.utils import isValidAffiliateId
 from fastapi import APIRouter, HTTPException, status, Query
 from app.database import Database, scale_container
 from app.schemas.affiliate import NewAffiliateInput, NewAffiliateOutput
 from azure.cosmos import exceptions as cosmos_exceptions
 import web3
 import uuid
-import random
+from random import choices
 import string
 
 router = APIRouter(
@@ -26,18 +27,17 @@ rewardLevels = [
 ]
 
 
-def get_affiliate_item(address: str, parent_affiliate_id: str, affiliate_id: str):
+def get_affiliate_item(address: str, parent_id: str, id: str):
     return {
-        "affiliate_id": affiliate_id,
+        "id": id,
         "address": address,
-        "parent_affiliate_id": parent_affiliate_id,
+        "parent_id": parent_id,
     }
 
 
-def get_random_id() -> str:
+def generate_random_id() -> str:
     chars = string.ascii_uppercase + string.digits
-    return "-".join("".join(random.choices(chars) for _ in range(4)) for __ in range(4))
-
+    return "-".join(("".join(choices(chars)[0] for _ in range(4))) for __ in range(4))
 
 if len(list(rewardLevelContainer.read_all_items())) == 0:
     for rewardLevel in rewardLevels:
@@ -48,15 +48,23 @@ rewardLevels = list(rewardLevelContainer.read_all_items())
 
 @router.post(
     "/",
-    description="Create an affiliate ID along with an optional parent_affiliate_id parameter.",
+    description="Create an affiliate ID along with an optional parent_id parameter.",
     response_model=NewAffiliateOutput,
 )
 async def new_affiliate(data: NewAffiliateInput):
-    print(data)
-    if data.parent_affiliate_id != None:
+    if data.parent_id.__len__() == 0:
+        data.parent_id = None
+
+    if data.parent_id != None :
+        if not isValidAffiliateId(data.parent_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid parent affiliate id",
+            )
+            
         try:
             item = affiliateContainer.read_item(
-                item=data.parent_affiliate_id, partition_key=data.parent_affiliate_id
+                item=data.parent_id, partition_key=data.parent_id
             )
         except cosmos_exceptions.CosmosResourceNotFoundError:
             raise HTTPException(
@@ -65,35 +73,47 @@ async def new_affiliate(data: NewAffiliateInput):
             )
         except Exception:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Something went wrong in server side",
             )
 
-    new_affiliate_id = get_random_id()
-    while (
-        affiliateContainer.read_item(
-            item=new_affiliate_id, partition_key=new_affiliate_id
-        )
-        != None
-    ):
-        new_affiliate_id = get_random_id()
+        print(item, data)
+        if item.address == data.address:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent affiliate is invalid",
+            )
+
+    new_id = generate_random_id()
+    try:
+        while (
+            affiliateContainer.read_item(
+                item=new_id, partition_key=new_id
+            )
+            != None
+        ):
+            new_id = generate_random_id()
+    except:
+        print("Generated random id", new_id)
 
     new_affiliate = {
-        "affiliate_id": new_affiliate_id,
+        "id": new_id,
         "address": data.address,
-        "parent_affiliate_id": data.parent_affiliate_id,
+        "parent_id": data.parent_id,
     }
-    affiliateContainer.create_item(body=new_affiliate)
-
+    try:
+        affiliateContainer.create_item(body=new_affiliate)
+    except Exception as ex:
+        print(ex)
 
 @router.post(
-    "/{affiliate_id}", description="Submit a transaction hash to redeem as a purchase."
+    "/{id}", description="Submit a transaction hash to redeem as a purchase."
 )
 async def redeem_by_transaction(
-    affiliate_id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
+    id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
     transaction_hash: str = Query(regex="0x[a-zA-Z0-9]{64}"),
 ):
-    item = affiliateContainer.read_item(item=affiliate_id, partition_key=affiliate_id)
+    item = affiliateContainer.read_item(item=id, partition_key=id)
     if item == None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

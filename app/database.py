@@ -21,7 +21,7 @@ class Database:
 
     def getContrainer(self, containerId):
         return self.db.create_container_if_not_exists(
-            id=containerId, partition_key=PartitionKey(path="/partitionKey")
+            id=containerId, partition_key=PartitionKey(path="/id", kind="Hash")
         )
 
 

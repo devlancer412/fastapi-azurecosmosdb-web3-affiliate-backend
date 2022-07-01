@@ -15,9 +15,9 @@ router = APIRouter(
 )
 
 database = Database()
-rewardLevelContainer = database.getContrainer(containerId="REWARD_LEVEL")
+rewardLevelContainer = database.getContrainer(containerId="REWARD_LEVELS")
 affiliateContainer = database.getContrainer(containerId="AFFILIATES")
-redeemContainer = database.getContrainer(containerId="REDEEM")
+redeemContainer = database.getContrainer(containerId="REDEEMS")
 
 
 rewardLevels = [
@@ -39,6 +39,7 @@ def generate_random_id() -> str:
     chars = string.ascii_uppercase + string.digits
     return "-".join(("".join(choices(chars)[0] for _ in range(4))) for __ in range(4))
 
+
 if len(list(rewardLevelContainer.read_all_items())) == 0:
     for rewardLevel in rewardLevels:
         rewardLevelContainer.create_item(body=rewardLevel)
@@ -55,13 +56,13 @@ async def new_affiliate(data: NewAffiliateInput):
     if data.parent_id.__len__() == 0:
         data.parent_id = None
 
-    if data.parent_id != None :
+    if data.parent_id != None:
         if not isValidAffiliateId(data.parent_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid parent affiliate id",
             )
-            
+
         try:
             item = affiliateContainer.read_item(
                 item=data.parent_id, partition_key=data.parent_id
@@ -77,21 +78,15 @@ async def new_affiliate(data: NewAffiliateInput):
                 detail="Something went wrong in server side",
             )
 
-        print(item, data)
-        if item.address == data.address:
+        if item["address"] == data.address:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Parent affiliate is invalid",
+                detail="You can't add another affiliate to your affiliate",
             )
 
     new_id = generate_random_id()
     try:
-        while (
-            affiliateContainer.read_item(
-                item=new_id, partition_key=new_id
-            )
-            != None
-        ):
+        while affiliateContainer.read_item(item=new_id, partition_key=new_id) != None:
             new_id = generate_random_id()
     except:
         print("Generated random id", new_id)
@@ -102,13 +97,13 @@ async def new_affiliate(data: NewAffiliateInput):
         "parent_id": data.parent_id,
     }
     try:
-        affiliateContainer.create_item(body=new_affiliate)
+        item = affiliateContainer.create_item(body=new_affiliate)
     except Exception as ex:
         print(ex)
+    return item
 
-@router.post(
-    "/{id}", description="Submit a transaction hash to redeem as a purchase."
-)
+
+@router.post("/{id}", description="Submit a transaction hash to redeem as a purchase.")
 async def redeem_by_transaction(
     id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
     transaction_hash: str = Query(regex="0x[a-zA-Z0-9]{64}"),

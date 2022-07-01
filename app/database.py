@@ -19,9 +19,15 @@ class Database:
         self.db = client.create_database_if_not_exists(id=DATABASE_ID)
         print("Database with id '{0}' created".format(DATABASE_ID))
 
-    def getContrainer(self, containerId):
+    def getContrainer(self, container_id, partition_key=None):
+        if partition_key == None:
+            return self.db.create_container_if_not_exists(
+                id=container_id, partition_key=PartitionKey(path="/id", kind="Hash")
+            )
+
         return self.db.create_container_if_not_exists(
-            id=containerId, partition_key=PartitionKey(path="/id", kind="Hash")
+            id=container_id,
+            partition_key=PartitionKey(path="/{}".format(partition_key), kind="Hash"),
         )
 
 

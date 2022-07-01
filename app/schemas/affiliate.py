@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import List
 
 
 class NewAffiliateInput(BaseModel):
@@ -15,3 +16,7 @@ class NewAffiliateInput(BaseModel):
 
 class NewAffiliateOutput(NewAffiliateInput):
     id: str
+
+
+class RequestRedeemInput(BaseModel):
+    redeem_codes: List[int] = []

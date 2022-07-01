@@ -1,10 +1,18 @@
-from app.utils import isValidAffiliateId
+from app.utils import (
+    compare_address,
+    get_transaction_purchase_log,
+    is_valid_affiliate_id,
+    sign_for_redeem,
+    uint256_to_address,
+)
 from fastapi import APIRouter, HTTPException, status, Query
 from app.database import Database, scale_container
-from app.schemas.affiliate import NewAffiliateInput, NewAffiliateOutput
+from app.schemas.affiliate import (
+    NewAffiliateInput,
+    NewAffiliateOutput,
+    RequestRedeemInput,
+)
 from azure.cosmos import exceptions as cosmos_exceptions
-import web3
-import uuid
 from random import choices
 import string
 
@@ -15,15 +23,15 @@ router = APIRouter(
 )
 
 database = Database()
-rewardLevelContainer = database.getContrainer(containerId="REWARD_LEVELS")
-affiliateContainer = database.getContrainer(containerId="AFFILIATES")
-redeemContainer = database.getContrainer(containerId="REDEEMS")
+reward_level_container = database.getContrainer(container_id="REWARD_LEVELS")
+affiliate_container = database.getContrainer(container_id="AFFILIATES")
+redeem_container = database.getContrainer(container_id="REDEEMS")
 
 
 rewardLevels = [
-    {"id": "0", "reward": 2.4},
-    {"id": "1", "reward": 0.6},
-    {"id": "2", "reward": 0.12},
+    {"id": "0", "reward": 2_400_000},
+    {"id": "1", "reward": 600_000},
+    {"id": "2", "reward": 120_000},
 ]
 
 
@@ -40,11 +48,11 @@ def generate_random_id() -> str:
     return "-".join(("".join(choices(chars)[0] for _ in range(4))) for __ in range(4))
 
 
-if len(list(rewardLevelContainer.read_all_items())) == 0:
+if len(list(reward_level_container.read_all_items())) == 0:
     for rewardLevel in rewardLevels:
-        rewardLevelContainer.create_item(body=rewardLevel)
+        reward_level_container.create_item(body=rewardLevel)
 
-rewardLevels = list(rewardLevelContainer.read_all_items())
+reward_levels = list(reward_level_container.read_all_items())
 
 
 @router.post(
@@ -57,14 +65,14 @@ async def new_affiliate(data: NewAffiliateInput):
         data.parent_id = None
 
     if data.parent_id != None:
-        if not isValidAffiliateId(data.parent_id):
+        if not is_valid_affiliate_id(data.parent_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid parent affiliate id",
             )
 
         try:
-            item = affiliateContainer.read_item(
+            item = affiliate_container.read_item(
                 item=data.parent_id, partition_key=data.parent_id
             )
         except cosmos_exceptions.CosmosResourceNotFoundError:
@@ -86,7 +94,7 @@ async def new_affiliate(data: NewAffiliateInput):
 
     new_id = generate_random_id()
     try:
-        while affiliateContainer.read_item(item=new_id, partition_key=new_id) != None:
+        while affiliate_container.read_item(item=new_id, partition_key=new_id) != None:
             new_id = generate_random_id()
     except:
         print("Generated random id", new_id)
@@ -97,21 +105,185 @@ async def new_affiliate(data: NewAffiliateInput):
         "parent_id": data.parent_id,
     }
     try:
-        item = affiliateContainer.create_item(body=new_affiliate)
+        item = affiliate_container.create_item(body=new_affiliate)
     except Exception as ex:
         print(ex)
     return item
 
 
-@router.post("/{id}", description="Submit a transaction hash to redeem as a purchase.")
+@router.post(
+    "/{affiliate_id}", description="Submit a transaction hash to redeem as a purchase."
+)
 async def redeem_by_transaction(
-    id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
+    affiliate_id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
     transaction_hash: str = Query(regex="0x[a-zA-Z0-9]{64}"),
 ):
-    item = affiliateContainer.read_item(item=id, partition_key=id)
-    if item == None:
+    log = get_transaction_purchase_log(transaction_hash)
+
+    if len(log) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Affiliate doesn't exist",
+            detail="No such log",
         )
-    transaction = web3.eth.get_transzction(transaction_hash)
+
+    if log == None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Something went wrong in server side",
+        )
+
+    try:
+        affiliate = affiliate_container.read_item(
+            item=affiliate_id, partition_key=affiliate_id
+        )
+
+    except cosmos_exceptions.CosmosResourceNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Parent affiliate doesn't exist",
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Something went wrong in server side",
+        )
+
+    if (
+        compare_address(affiliate["address"], uint256_to_address(log.topics[1].hex()))
+        == False
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Doesn't runner of this transaction",
+        )
+
+    try:
+        last_redeems = list(
+            redeem_container.query_items(
+                query="SELECT * FROM r WHERE r.transaction_hash=@hash",
+                parameters=[{"name": "@hash", "value": transaction_hash}],
+                enable_cross_partition_query=True,
+            )
+        )
+
+    except Exception as ex:
+        print(ex)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Something went wrong in server side",
+        )
+
+    if len(last_redeems) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Already redeemed",
+        )
+
+    count_str = redeem_container.query_items(
+        query="SELECT VALUE MAX(c.id) FROM c",
+        enable_cross_partition_query=True,
+    )
+    count = list(count_str)[0] + 1
+
+    redeems = []
+    for affiliate_level in range(len(reward_levels)):
+        redeem = {
+            "id": str(count + affiliate_level),
+            "transaction_hash": transaction_hash,
+            "address": affiliate["address"],
+            "affiliate_id": affiliate["id"],
+            "amount": str(int(log.data, 16)),
+            "affiliate_level": str(count + affiliate_level),
+        }
+
+        redeems.append(redeem)
+
+        redeem_container.create_item(body=redeem)
+
+        if affiliate["parent_id"] == None:
+            break
+
+        try:
+            affiliate = affiliate_container.read_item(
+                item=affiliate["parent_id"], partition_key=affiliate["parent_id"]
+            )
+
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Something went wrong in server side",
+            )
+
+    return redeems
+
+
+@router.get("/{affiliate_id}", description="Get the rewards for an affiliate.")
+async def get_redeem(
+    affiliate_id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
+):
+    return list(
+        redeem_container.query_items(
+            query="SELECT r.id as redeem_code, r.transaction_hash, r.address, r.affiliate_id, r.amount, r.affiliate_level FROM r WHERE r.affiliate_id=@hash",
+            parameters=[{"name": "@hash", "value": affiliate_id}],
+            enable_cross_partition_query=True,
+        )
+    )
+
+
+@router.post(
+    "/{affiliate_id}/redeem",
+    description="Submit a transaction hash to redeem as a purchase.",
+)
+async def redeem_by_transaction(
+    affiliate_id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
+    data: RequestRedeemInput = RequestRedeemInput(),
+):
+    total_value = 0
+    for redeem_code in data.redeem_codes:
+        try:
+            redeem = redeem_container.read_item(
+                item=str(redeem_code), partition_key=str(redeem_code)
+            )
+
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Redeem doesn't exist",
+            )
+
+        except Exception as ex:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Something went wrong in server side",
+            )
+
+        if redeem["affiliate_id"] != affiliate_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Redeem code and affiliate id doesn't match",
+            )
+        total_value += int(redeem["amount"]) * int(
+            str(reward_levels[int(redeem["affiliate_level"])]["reward"])
+        )
+
+    affiliate = affiliate_container.read_item(
+        item=affiliate_id, partition_key=affiliate_id
+    )
+
+    signature = sign_for_redeem(
+        address=affiliate["address"],
+        redeem_codes=data.redeem_codes,
+        total_value=total_value,
+    )
+
+    return {
+        "redeemer": affiliate["address"],
+        "redeem_codes": data.redeem_codes,
+        "total_value": total_value,
+        "signature": {
+            "r": str(signature.r),
+            "s": str(signature.s),
+            "v": str(signature.v),
+        },
+    }

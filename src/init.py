@@ -10,8 +10,8 @@ __status__ = "alpha"
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .__internal import bootstrap
-from app.routes import router
+from app.__internal import bootstrap
+from src.routes import router
 
 app = FastAPI(
     title="Affiliate API",

@@ -5,9 +5,14 @@ from internal import ConfigBase, UNSET
 
 
 class Configuration(ConfigBase):
-    MY_CONFIGURATION: str = UNSET
-    REMOTE_IP: str = UNSET
-    HAS_DEFAULT_VALUE: int = 40
+    RPC_URL: str = UNSET
+    AFFILIATE_CALL_ID: str = UNSET
+    PRIVATE_KEY: str = UNSET
+
+    # Database
+    ACCOUNT_HOST: str = UNSET
+    ACCOUNT_KEY: str = UNSET
+    COSMOS_DATABASE: str = UNSET
 
 
 # --- Do not edit anything below this line, or do it, I'm not your mom ----

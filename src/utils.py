@@ -5,17 +5,15 @@ import json
 from web3 import Web3
 from web3.auto import w3
 from eth_account.messages import encode_defunct
-from dotenv import load_dotenv
+from config import cfg
 
-load_dotenv(".env")
-
-RPC_URL = os.getenv("RPC_URL")
-PURCHASE_EVENT_FILTER = os.getenv("AFFILIATE_CALL_ID").lower()
-PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+RPC_URL = cfg.RPC_URL
+PURCHASE_EVENT_FILTER = cfg.AFFILIATE_CALL_ID.lower()
+PRIVATE_KEY = cfg.PRIVATE_KEY
 
 web3 = Web3(provider=Web3.HTTPProvider(RPC_URL))
 
-affiliate_data = json.load(open("app/contracts/affiliate.json"))
+affiliate_data = json.load(open(os.path.join("src", "contracts", "affiliate.json")))
 affiliate_contract = web3.eth.contract(
     address=affiliate_data["address"], abi=affiliate_data["abi"]
 )

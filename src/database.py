@@ -3,13 +3,11 @@ import azure.cosmos.exceptions as exceptions
 from azure.cosmos.partition_key import PartitionKey
 
 import os
-from dotenv import load_dotenv
+from config import cfg
 
-load_dotenv(".env")
-
-HOST = os.getenv("ACCOUNT_HOST")
-MASTER_KEY = os.getenv("ACCOUNT_KEY")
-DATABASE_ID = os.getenv("COSMOS_DATABASE")
+HOST = cfg.ACCOUNT_HOST
+MASTER_KEY = cfg.ACCOUNT_KEY
+DATABASE_ID = cfg.COSMOS_DATABASE
 
 
 class Database:

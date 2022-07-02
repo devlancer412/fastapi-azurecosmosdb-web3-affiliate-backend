@@ -5,13 +5,14 @@ import json
 from web3 import Web3
 from web3.auto import w3
 from eth_account.messages import encode_defunct
-from dotenv import load_dotenv
+from random import choices
+import string
 
-load_dotenv(".env")
+from config import cfg
 
-RPC_URL = os.getenv("RPC_URL")
-PURCHASE_EVENT_FILTER = os.getenv("AFFILIATE_CALL_ID").lower()
-PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+RPC_URL = cfg.RPC_URL
+PURCHASE_EVENT_FILTER = cfg.AFFILIATE_CALL_ID.lower()
+PRIVATE_KEY = cfg.PRIVATE_KEY
 
 web3 = Web3(provider=Web3.HTTPProvider(RPC_URL))
 
@@ -19,6 +20,11 @@ affiliate_data = json.load(open("app/contracts/affiliate.json"))
 affiliate_contract = web3.eth.contract(
     address=affiliate_data["address"], abi=affiliate_data["abi"]
 )
+
+
+def generate_random_id() -> str:
+    chars = string.ascii_uppercase + string.digits
+    return "-".join(("".join(choices(chars)[0] for _ in range(4))) for __ in range(4))
 
 
 def get_valid_wallet_address(address: str) -> str:

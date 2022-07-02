@@ -3,21 +3,16 @@ import azure.cosmos.exceptions as exceptions
 from azure.cosmos.partition_key import PartitionKey
 
 import os
-from dotenv import load_dotenv
 
-load_dotenv(".env")
-
-HOST = os.getenv("ACCOUNT_HOST")
-MASTER_KEY = os.getenv("ACCOUNT_KEY")
-DATABASE_ID = os.getenv("COSMOS_DATABASE")
+from config import cfg
 
 
 class Database:
     def __init__(self) -> None:
-        client = cosmos_client.CosmosClient(HOST, MASTER_KEY)
+        client = cosmos_client.CosmosClient(cfg.ACCOUNT_HOST, cfg.ACCOUNT_KEY)
 
-        self.db = client.create_database_if_not_exists(id=DATABASE_ID)
-        print("Database with id '{0}' created".format(DATABASE_ID))
+        self.db = client.create_database_if_not_exists(id=cfg.COSMOS_DATABASE)
+        print("Database with id '{0}' created".format(cfg.COSMOS_DATABASE))
 
     def getContrainer(self, container_id, partition_key=None):
         if partition_key == None:

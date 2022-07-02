@@ -1,5 +1,4 @@
 from typing import List
-import azure.functions as func
 import os
 import json
 
@@ -41,8 +40,3 @@ class ConfigBase:
 
         return r
     
-
-def json_response(data, status_code=200) -> func.HttpResponse:
-    return func.HttpResponse(
-        json.dumps(data), status_code=status_code, mimetype="application/json"
-    )

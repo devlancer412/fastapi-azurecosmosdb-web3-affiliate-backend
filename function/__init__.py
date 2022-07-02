@@ -1,7 +1,7 @@
 import azure.functions as func
 import nest_asyncio
 
-from src.init import app
+from app.init import app
 
 nest_asyncio.apply()
 

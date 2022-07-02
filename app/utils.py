@@ -1,3 +1,4 @@
+from logging import exception
 import re
 import os
 import json
@@ -20,9 +21,12 @@ affiliate_contract = web3.eth.contract(
 )
 
 
-def is_valid_wallet_address(address: str) -> bool:
-    pattern = re.compile("0x[0-9a-zA-Z]{32}")
-    return pattern.match(address)
+def get_valid_wallet_address(address: str) -> str:
+    try:
+        return Web3.toChecksumAddress(address)
+    except Exception as ex:
+        print(ex)
+        return None
 
 
 def is_valid_affiliate_id(id: str) -> bool:
@@ -63,3 +67,7 @@ def sign_for_redeem(address: str, redeem_codes: list[int], total_value):
 
     message = encode_defunct(eth_signed_message_hash)
     return w3.eth.account.sign_message(message, private_key=PRIVATE_KEY)
+
+
+def format_price(price: int) -> str:
+    return "{:_}".format(price)

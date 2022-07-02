@@ -1,6 +1,9 @@
+from itertools import tee
 from app.utils import (
     compare_address,
+    format_price,
     get_transaction_purchase_log,
+    get_valid_wallet_address,
     is_valid_affiliate_id,
     sign_for_redeem,
     uint256_to_address,
@@ -99,6 +102,14 @@ async def new_affiliate(data: NewAffiliateInput):
     except:
         print("Generated random id", new_id)
 
+    valid_address = get_valid_wallet_address(data.address)
+
+    if valid_address == None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Wallet address is invalid",
+        )
+
     new_affiliate = {
         "id": new_id,
         "address": data.address,
@@ -184,7 +195,13 @@ async def redeem_by_transaction(
         query="SELECT VALUE MAX(c.id) FROM c",
         enable_cross_partition_query=True,
     )
-    count = list(count_str)[0] + 1
+    result, result_backup = tee(count_str)
+
+    try:
+        count = list(count_str)[0] + 1
+    except Exception as ex:
+        print(ex)
+        count = 0
 
     redeems = []
     for affiliate_level in range(len(reward_levels)):
@@ -193,7 +210,7 @@ async def redeem_by_transaction(
             "transaction_hash": transaction_hash,
             "address": affiliate["address"],
             "affiliate_id": affiliate["id"],
-            "amount": str(int(log.data, 16)),
+            "amount": str(int(log.data.hex(), 16)),
             "affiliate_level": str(count + affiliate_level),
         }
 
@@ -280,7 +297,7 @@ async def redeem_by_transaction(
     return {
         "redeemer": affiliate["address"],
         "redeem_codes": data.redeem_codes,
-        "total_value": total_value,
+        "total_value": format_price(total_value),
         "signature": {
             "r": str(signature.r),
             "s": str(signature.s),

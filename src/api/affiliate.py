@@ -144,9 +144,7 @@ class AffiliateAPI(Function):
                 )
 
             if (
-                compare_address(
-                    affiliate["address"], uint256_to_address(log.topics[1].hex())
-                )
+                is_valid_affiliate_id(affiliate["address"], log.topics[1].hex())
                 == False
             ):
                 raise HTTPException(

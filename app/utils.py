@@ -4,6 +4,7 @@ import os
 import json
 from web3 import Web3
 from web3.auto import w3
+from eth_abi import decode_abi
 from eth_account.messages import encode_defunct
 from random import choices
 import string
@@ -60,6 +61,14 @@ def uint256_to_address(address: str):
 
 def compare_address(address1: str, address2: str):
     return Web3.toChecksumAddress(address1) == Web3.toChecksumAddress(address2)
+
+
+def is_valid_affiliate_id(address: str, affiliate_id: str):
+    hashed_address = Web3.solidityKeccak(
+        ["address"],
+        [Web3.toChecksumAddress(address)],
+    )
+    return hashed_address == affiliate_id
 
 
 def sign_for_redeem(address: str, redeem_codes: list[int], total_value):

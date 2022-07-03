@@ -5,6 +5,7 @@ from app.utils import (
     compare_address,
     format_price,
     generate_random_id,
+    get_eggsale_amount,
     get_transaction_purchase_log,
     get_valid_wallet_address,
     is_valid_affiliate_id,
@@ -185,6 +186,8 @@ class AffiliateAPI(Function):
                 print(ex)
                 count = 0
 
+            amount = get_eggsale_amount(log.data.hex())
+
             redeems = []
             for affiliate_level in range(len(reward_levels)):
                 redeem = {
@@ -192,7 +195,7 @@ class AffiliateAPI(Function):
                     "transaction_hash": transaction_hash,
                     "address": affiliate["address"],
                     "affiliate_id": affiliate["id"],
-                    "amount": str(int(log.data.hex(), 16)),
+                    "amount": str(amount),
                     "affiliate_level": str(count + affiliate_level),
                 }
 

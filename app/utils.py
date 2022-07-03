@@ -86,3 +86,8 @@ def sign_for_redeem(address: str, redeem_codes: list[int], total_value):
 
 def format_price(price: int) -> str:
     return "{:_}".format(price)
+
+
+def get_eggsale_amount(data: str) -> int:
+    decoded = decode_abi(["address", "amount"], data)
+    return int(decoded[1])

@@ -1,24 +1,27 @@
 from __future__ import annotations
-from typing import Callable, Optional
+from typing import Callable
+from fastapi import FastAPI
 from app.__internal import Function
-from app.utils import (
+
+from itertools import tee
+from src.utils import (
     compare_address,
     format_price,
-    generate_random_id,
     get_transaction_purchase_log,
     get_valid_wallet_address,
     is_valid_affiliate_id,
     sign_for_redeem,
     uint256_to_address,
 )
-from fastapi import FastAPI, APIRouter, HTTPException, status, Query
-from app.database import Database, scale_container
-from app.schemas.affiliate import (
+from fastapi import APIRouter, HTTPException, status, Query
+from src.database import Database
+from src.schemas.affiliate import (
     NewAffiliateInput,
     NewAffiliateOutput,
     RequestRedeemInput,
 )
 from azure.cosmos import exceptions as cosmos_exceptions
+from random import choices
 import string
 
 
@@ -36,23 +39,16 @@ def get_affiliate_item(address: str, parent_id: str, id: str):
 
 
 class Affiliate(Function):
-
     def __init__(self, error: Callable):
         self.log.info("This is where the initialization code go")
         self.database = Database()
-        self.reward_level_container = self.database.getContrainer(container_id="REWARD_LEVELS")
-        self.affiliate_container = self.database.getContrainer(container_id="AFFILIATES")
+        self.reward_level_container = self.database.getContrainer(
+            container_id="REWARD_LEVELS"
+        )
+        self.affiliate_container = self.database.getContrainer(
+            container_id="AFFILIATES"
+        )
         self.redeem_container = self.database.getContrainer(container_id="REDEEMS")
-
-        self.rewardLevels = [
-            {"id": "0", "reward": 2_400_000},
-            {"id": "1", "reward": 600_000},
-            {"id": "2", "reward": 120_000},
-        ]
-
-        if len(list(self.reward_level_container.read_all_items())) == 0:
-            for rewardLevel in self.rewardLevels:
-                self.reward_level_container.create_item(body=rewardLevel)
 
         self.reward_levels = list(self.reward_level_container.read_all_items())
 
@@ -63,10 +59,24 @@ class Affiliate(Function):
             responses={404: {"description": "Not found"}},
         )
 
+        @router.post(
+            "/",
+            description="Create an affiliate ID along with an optional parent_id parameter.",
+            response_model=NewAffiliateOutput,
+        )
+        async def new_affiliate(data: NewAffiliateInput):
+            if data.parent_id.__len__() == 0:
+                data.parent_id = None
+
+            if data.parent_id != None:
+                if not is_valid_affiliate_id(data.parent_id):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid parent affiliate id",
+                    )
+
+                try:
                     item = self.affiliate_container.read_item(
-=======
-                    item = affiliate_container.read_item(
->>>>>>> origin
                         item=data.parent_id, partition_key=data.parent_id
                     )
                 except cosmos_exceptions.CosmosResourceNotFoundError:
@@ -88,7 +98,12 @@ class Affiliate(Function):
 
             new_id = generate_random_id()
             try:
-                while self.affiliate_container.read_item(item=new_id, partition_key=new_id) is None:
+                while (
+                    self.affiliate_container.read_item(
+                        item=new_id, partition_key=new_id
+                    )
+                    is None
+                ):
                     new_id = generate_random_id()
             except:
                 print("Generated random id", new_id)
@@ -113,11 +128,14 @@ class Affiliate(Function):
             return item
 
         @router.post(
-            "/{affiliate_id}", description="Submit a transaction hash to redeem as a purchase."
+            "/{affiliate_id}",
+            description="Submit a transaction hash to redeem as a purchase.",
         )
         async def redeem_by_transaction(
-                affiliate_id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
-                transaction_hash: str = Query(regex="0x[a-zA-Z0-9]{64}"),
+            affiliate_id: str = Query(
+                regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"
+            ),
+            transaction_hash: str = Query(regex="0x[a-zA-Z0-9]{64}"),
         ):
             log = get_transaction_purchase_log(transaction_hash)
 
@@ -151,8 +169,10 @@ class Affiliate(Function):
                 )
 
             if (
-                    compare_address(affiliate["address"], uint256_to_address(log.topics[1].hex()))
-                    == False
+                compare_address(
+                    affiliate["address"], uint256_to_address(log.topics[1].hex())
+                )
+                == False
             ):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -213,7 +233,8 @@ class Affiliate(Function):
 
                 try:
                     affiliate = self.affiliate_container.read_item(
-                        item=affiliate["parent_id"], partition_key=affiliate["parent_id"]
+                        item=affiliate["parent_id"],
+                        partition_key=affiliate["parent_id"],
                     )
 
                 except Exception:
@@ -226,7 +247,9 @@ class Affiliate(Function):
 
         @router.get("/{affiliate_id}", description="Get the rewards for an affiliate.")
         async def get_redeem(
-                affiliate_id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
+            affiliate_id: str = Query(
+                regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"
+            ),
         ):
             return list(
                 self.redeem_container.query_items(
@@ -241,8 +264,10 @@ class Affiliate(Function):
             description="Submit a transaction hash to redeem as a purchase.",
         )
         async def redeem_by_transaction(
-                affiliate_id: str = Query(regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"),
-                data: RequestRedeemInput = RequestRedeemInput(),
+            affiliate_id: str = Query(
+                regex="[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"
+            ),
+            data: RequestRedeemInput = RequestRedeemInput(),
         ):
             total_value = 0
             for redeem_code in data.redeem_codes:
@@ -294,7 +319,3 @@ class Affiliate(Function):
             }
 
         app.include_router(router)
-<<<<<<< HEAD
-
-=======
->>>>>>> origin

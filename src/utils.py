@@ -5,6 +5,9 @@ import json
 from web3 import Web3
 from web3.auto import w3
 from eth_account.messages import encode_defunct
+from random import choices
+import string
+
 from config import cfg
 
 RPC_URL = cfg.RPC_URL
@@ -17,6 +20,11 @@ affiliate_data = json.load(open(os.path.join("src", "contracts", "affiliate.json
 affiliate_contract = web3.eth.contract(
     address=affiliate_data["address"], abi=affiliate_data["abi"]
 )
+
+
+def generate_random_id() -> str:
+    chars = string.ascii_uppercase + string.digits
+    return "-".join(("".join(choices(chars)[0] for _ in range(4))) for __ in range(4))
 
 
 def get_valid_wallet_address(address: str) -> str:

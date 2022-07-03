@@ -1,27 +1,24 @@
 from __future__ import annotations
-from typing import Callable
-from fastapi import FastAPI
+from typing import Callable, Optional
 from app.__internal import Function
-
-from itertools import tee
-from src.utils import (
+from app.utils import (
     compare_address,
     format_price,
+    generate_random_id,
     get_transaction_purchase_log,
     get_valid_wallet_address,
     is_valid_affiliate_id,
     sign_for_redeem,
     uint256_to_address,
 )
-from fastapi import APIRouter, HTTPException, status, Query
-from src.database import Database
-from src.schemas.affiliate import (
+from fastapi import FastAPI, APIRouter, HTTPException, status, Query
+from app.database import Database, scale_container
+from app.schemas.affiliate import (
     NewAffiliateInput,
     NewAffiliateOutput,
     RequestRedeemInput,
 )
 from azure.cosmos import exceptions as cosmos_exceptions
-from random import choices
 import string
 
 
@@ -66,24 +63,10 @@ class Affiliate(Function):
             responses={404: {"description": "Not found"}},
         )
 
-        @router.post(
-            "/",
-            description="Create an affiliate ID along with an optional parent_id parameter.",
-            response_model=NewAffiliateOutput,
-        )
-        async def new_affiliate(data: NewAffiliateInput):
-            if data.parent_id.__len__() == 0:
-                data.parent_id = None
-
-            if data.parent_id != None:
-                if not is_valid_affiliate_id(data.parent_id):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Invalid parent affiliate id",
-                    )
-
-                try:
                     item = self.affiliate_container.read_item(
+=======
+                    item = affiliate_container.read_item(
+>>>>>>> origin
                         item=data.parent_id, partition_key=data.parent_id
                     )
                 except cosmos_exceptions.CosmosResourceNotFoundError:
@@ -311,4 +294,7 @@ class Affiliate(Function):
             }
 
         app.include_router(router)
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin

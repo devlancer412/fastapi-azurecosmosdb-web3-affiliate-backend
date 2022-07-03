@@ -12,6 +12,7 @@ class Configuration(ConfigBase):
     PRIVATE_KEY: str = (
         "6f8749b0d24524c8ee094ddac371c8e3ae8771e42505927196b0c8d6b67dd175"
     )
+    EGGSALE_ADDRESS: str = "0x74c5775Bf7Efc75D8864A26513d5ed8579CC6a35"
 
     # Database
     ACCOUNT_HOST: str = "https://affiliate-database.documents.azure.com:443/"

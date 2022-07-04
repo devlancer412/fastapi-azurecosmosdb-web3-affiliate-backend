@@ -211,6 +211,8 @@ class Affiliate(Function):
                 print(ex)
                 count = 0
 
+            amount = get_eggsale_amount(log.data.hex())
+
             redeems = []
             for affiliate_level in range(len(self.reward_levels)):
                 redeem = {
@@ -218,7 +220,7 @@ class Affiliate(Function):
                     "transaction_hash": transaction_hash,
                     "address": affiliate["address"],
                     "affiliate_id": affiliate["id"],
-                    "amount": str(int(log.data.hex(), 16)),
+                    "amount": str(amount),
                     "affiliate_level": str(count + affiliate_level),
                 }
 

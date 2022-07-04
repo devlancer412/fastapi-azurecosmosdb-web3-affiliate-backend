@@ -90,4 +90,4 @@ def format_price(price: int) -> str:
 
 def get_eggsale_amount(data: str) -> int:
     decoded = decode_abi(["address", "amount"], data)
-    return int(decoded[1])
+    return int(decoded[len(decoded) - 1])

@@ -3,15 +3,13 @@ from typing import Callable
 from fastapi import FastAPI
 from app.__internal import Function
 
-from itertools import tee
 from src.utils import (
-    compare_address,
     format_price,
+    get_eggsale_amount,
     get_transaction_purchase_log,
     get_valid_wallet_address,
     is_valid_affiliate_id,
     sign_for_redeem,
-    uint256_to_address,
 )
 from fastapi import APIRouter, HTTPException, status, Query
 from src.database import Database
@@ -203,16 +201,16 @@ class Affiliate(Function):
                 query="SELECT VALUE MAX(c.id) FROM c",
                 enable_cross_partition_query=True,
             )
-            result, result_backup = tee(count_str)
 
             try:
-                count = list(count_str)[0] + 1
+                count = int(list(count_str)[0]) + 1
             except Exception as ex:
                 print(ex)
                 count = 0
 
-            amount = get_eggsale_amount(log.data.hex())
+            amount = get_eggsale_amount(log.data)
 
+            print(count)
             redeems = []
             for affiliate_level in range(len(self.reward_levels)):
                 redeem = {
@@ -221,7 +219,7 @@ class Affiliate(Function):
                     "address": affiliate["address"],
                     "affiliate_id": affiliate["id"],
                     "amount": str(amount),
-                    "affiliate_level": str(count + affiliate_level),
+                    "affiliate_level": str(affiliate_level),
                 }
 
                 redeems.append(redeem)
@@ -293,9 +291,12 @@ class Affiliate(Function):
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Redeem code and affiliate id doesn't match",
                     )
+
                 total_value += int(redeem["amount"]) * int(
                     str(self.reward_levels[int(redeem["affiliate_level"])]["reward"])
                 )
+
+                print(total_value)
 
             affiliate = self.affiliate_container.read_item(
                 item=affiliate_id, partition_key=affiliate_id

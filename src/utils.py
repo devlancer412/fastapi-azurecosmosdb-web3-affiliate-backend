@@ -2,6 +2,7 @@ from logging import exception
 import re
 import os
 import json
+from urllib.request import HTTPPasswordMgrWithDefaultRealm
 from web3 import Web3
 from web3.auto import w3
 from eth_abi import decode_abi
@@ -17,7 +18,7 @@ PRIVATE_KEY = cfg.PRIVATE_KEY
 
 web3 = Web3(provider=Web3.HTTPProvider(RPC_URL))
 
-affiliate_data = json.load(open("app/contracts/affiliate.json"))
+affiliate_data = json.load(open(os.path.join("src", "contracts", "affiliate.json")))
 affiliate_contract = web3.eth.contract(
     address=affiliate_data["address"], abi=affiliate_data["abi"]
 )
@@ -45,6 +46,7 @@ def is_valid_affiliate_id(id: str) -> bool:
 def get_transaction_purchase_log(tx_hash: str) -> object:
     try:
         receipt = web3.eth.get_transaction_receipt(tx_hash)
+
         return list(
             filter(
                 lambda log: log.topics[0].hex() == PURCHASE_EVENT_FILTER, receipt.logs
@@ -68,7 +70,7 @@ def is_valid_affiliate_id(address: str, affiliate_id: str):
         ["address"],
         [Web3.toChecksumAddress(address)],
     )
-    return hashed_address == affiliate_id
+    return hashed_address.hex() == affiliate_id
 
 
 def sign_for_redeem(address: str, redeem_codes: list[int], total_value):
@@ -88,6 +90,6 @@ def format_price(price: int) -> str:
     return "{:_}".format(price)
 
 
-def get_eggsale_amount(data: str) -> int:
-    decoded = decode_abi(["address", "amount"], data)
+def get_eggsale_amount(data: bytes) -> int:
+    decoded = decode_abi(["address", "uint256"], bytes(data))
     return int(decoded[len(decoded) - 1])

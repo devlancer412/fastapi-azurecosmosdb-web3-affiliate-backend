@@ -1,41 +1,61 @@
 from __future__ import annotations
-from typing import Callable, Optional
+from typing import Callable
+from fastapi import FastAPI
 from app.__internal import Function
-from app.utils import (
-    compare_address,
+
+from src.utils import (
     format_price,
-    generate_random_id,
     get_eggsale_amount,
     get_transaction_purchase_log,
     get_valid_wallet_address,
     is_valid_affiliate_id,
     sign_for_redeem,
-    uint256_to_address,
 )
-from fastapi import FastAPI, APIRouter, HTTPException, status, Query
-from app.database import Database, scale_container
-from app.schemas.affiliate import (
+from fastapi import APIRouter, HTTPException, status, Query
+from src.database import Database
+from src.schemas.affiliate import (
     NewAffiliateInput,
     NewAffiliateOutput,
     RequestRedeemInput,
 )
 from azure.cosmos import exceptions as cosmos_exceptions
+from random import choices
+import string
 
 
-class AffiliateAPI(Function):
+def generate_random_id() -> str:
+    chars = string.ascii_uppercase + string.digits
+    return "-".join(("".join(choices(chars)[0] for _ in range(4))) for __ in range(4))
+
+
+def get_affiliate_item(address: str, parent_id: str, id: str):
+    return {
+        "id": id,
+        "address": address,
+        "parent_id": parent_id,
+    }
+
+
+class Affiliate(Function):
     def __init__(self, error: Callable):
         self.log.info("This is where the initialization code go")
+        self.database = Database()
+        self.reward_level_container = self.database.getContrainer(
+            container_id="REWARD_LEVELS"
+        )
+        self.affiliate_container = self.database.getContrainer(
+            container_id="AFFILIATES"
+        )
+        self.redeem_container = self.database.getContrainer(container_id="REDEEMS")
+
+        self.reward_levels = list(self.reward_level_container.read_all_items())
 
     def Bootstrap(self, app: FastAPI):
-
-        router = APIRouter(prefix="/api/affiliate")
-
-        database = Database()
-        reward_level_container = database.getContrainer(container_id="REWARD_LEVELS")
-        affiliate_container = database.getContrainer(container_id="AFFILIATES")
-        redeem_container = database.getContrainer(container_id="REDEEMS")
-
-        reward_levels = list(reward_level_container.read_all_items())
+        router = APIRouter(
+            prefix="/affiliate",
+            tags=["affiliate"],
+            responses={404: {"description": "Not found"}},
+        )
 
         @router.post(
             "/",
@@ -54,7 +74,7 @@ class AffiliateAPI(Function):
                     )
 
                 try:
-                    item = affiliate_container.read_item(
+                    item = self.affiliate_container.read_item(
                         item=data.parent_id, partition_key=data.parent_id
                     )
                 except cosmos_exceptions.CosmosResourceNotFoundError:
@@ -77,8 +97,10 @@ class AffiliateAPI(Function):
             new_id = generate_random_id()
             try:
                 while (
-                    affiliate_container.read_item(item=new_id, partition_key=new_id)
-                    != None
+                    self.affiliate_container.read_item(
+                        item=new_id, partition_key=new_id
+                    )
+                    is None
                 ):
                     new_id = generate_random_id()
             except:
@@ -86,7 +108,7 @@ class AffiliateAPI(Function):
 
             valid_address = get_valid_wallet_address(data.address)
 
-            if valid_address == None:
+            if valid_address is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Wallet address is invalid",
@@ -98,7 +120,7 @@ class AffiliateAPI(Function):
                 "parent_id": data.parent_id,
             }
             try:
-                item = affiliate_container.create_item(body=new_affiliate)
+                item = self.affiliate_container.create_item(body=new_affiliate)
             except Exception as ex:
                 print(ex)
             return item
@@ -128,7 +150,7 @@ class AffiliateAPI(Function):
                 )
 
             try:
-                affiliate = affiliate_container.read_item(
+                affiliate = self.affiliate_container.read_item(
                     item=affiliate_id, partition_key=affiliate_id
                 )
 
@@ -155,7 +177,7 @@ class AffiliateAPI(Function):
 
             try:
                 last_redeems = list(
-                    redeem_container.query_items(
+                    self.redeem_container.query_items(
                         query="SELECT * FROM r WHERE r.transaction_hash=@hash",
                         parameters=[{"name": "@hash", "value": transaction_hash}],
                         enable_cross_partition_query=True,
@@ -175,39 +197,40 @@ class AffiliateAPI(Function):
                     detail="Already redeemed",
                 )
 
-            count_str = redeem_container.query_items(
+            count_str = self.redeem_container.query_items(
                 query="SELECT VALUE MAX(c.id) FROM c",
                 enable_cross_partition_query=True,
             )
 
             try:
-                count = list(count_str)[0] + 1
+                count = int(list(count_str)[0]) + 1
             except Exception as ex:
                 print(ex)
                 count = 0
 
-            amount = get_eggsale_amount(log.data.hex())
+            amount = get_eggsale_amount(log.data)
 
+            print(count)
             redeems = []
-            for affiliate_level in range(len(reward_levels)):
+            for affiliate_level in range(len(self.reward_levels)):
                 redeem = {
                     "id": str(count + affiliate_level),
                     "transaction_hash": transaction_hash,
                     "address": affiliate["address"],
                     "affiliate_id": affiliate["id"],
                     "amount": str(amount),
-                    "affiliate_level": str(count + affiliate_level),
+                    "affiliate_level": str(affiliate_level),
                 }
 
                 redeems.append(redeem)
 
-                redeem_container.create_item(body=redeem)
+                self.redeem_container.create_item(body=redeem)
 
                 if affiliate["parent_id"] == None:
                     break
 
                 try:
-                    affiliate = affiliate_container.read_item(
+                    affiliate = self.affiliate_container.read_item(
                         item=affiliate["parent_id"],
                         partition_key=affiliate["parent_id"],
                     )
@@ -227,7 +250,7 @@ class AffiliateAPI(Function):
             ),
         ):
             return list(
-                redeem_container.query_items(
+                self.redeem_container.query_items(
                     query="SELECT r.id as redeem_code, r.transaction_hash, r.address, r.affiliate_id, r.amount, r.affiliate_level FROM r WHERE r.affiliate_id=@hash",
                     parameters=[{"name": "@hash", "value": affiliate_id}],
                     enable_cross_partition_query=True,
@@ -247,7 +270,7 @@ class AffiliateAPI(Function):
             total_value = 0
             for redeem_code in data.redeem_codes:
                 try:
-                    redeem = redeem_container.read_item(
+                    redeem = self.redeem_container.read_item(
                         item=str(redeem_code), partition_key=str(redeem_code)
                     )
 
@@ -268,11 +291,14 @@ class AffiliateAPI(Function):
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Redeem code and affiliate id doesn't match",
                     )
+
                 total_value += int(redeem["amount"]) * int(
-                    str(reward_levels[int(redeem["affiliate_level"])]["reward"])
+                    str(self.reward_levels[int(redeem["affiliate_level"])]["reward"])
                 )
 
-            affiliate = affiliate_container.read_item(
+                print(total_value)
+
+            affiliate = self.affiliate_container.read_item(
                 item=affiliate_id, partition_key=affiliate_id
             )
 

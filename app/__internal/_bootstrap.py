@@ -6,8 +6,8 @@ import sys
 
 from fastapi.responses import RedirectResponse
 
-class Logger:
 
+class Logger:
     def __init__(self, service: str):
         self.service = service
 
@@ -26,8 +26,10 @@ class Logger:
     def _log(self, typ: str, *msg):
         print(f"[{typ}] {self.service}: {' '.join([str(x) for x in msg])}")
 
+
 class Function:
     __log = None
+
     @staticmethod
     def _dummy_function():
         ...
@@ -46,8 +48,10 @@ class ConfigBase:
 
     def Load(self):
         for x in self.__dir__():
-            if x.startswith("__"): continue
-            if callable(getattr(self, x)): continue
+            if x.startswith("__"):
+                continue
+            if callable(getattr(self, x)):
+                continue
             if method := getattr(self, f"resolve_{x}", None):
                 self.__dict__[x] = method()
             else:
@@ -64,7 +68,6 @@ class ConfigBase:
                     print(f"Warning: .env produced an invalid entry in line {i + 1}")
         except FileNotFoundError:
             ...
-
 
         return self
 
@@ -87,6 +90,7 @@ def bootstrap(app):
     attempt to load any classes that has 'Function' subclassed.
     """
     for fn_str in glob.glob(os.path.join("src", "api", "**.py")):
+        print("Loading", fn_str)
         module_name = os.path.split(fn_str)[-1].replace(".py", "")
         spec = util.spec_from_file_location(module_name, fn_str)
         module = util.module_from_spec(spec)
@@ -94,9 +98,13 @@ def bootstrap(app):
         spec.loader.exec_module(module)
 
         fn = None
+        print(dir(module))
         for attr_str in dir(module):
             attr = getattr(module, attr_str)
+            if "_bootstrap.Function" in f"{attr}":
+                continue
             if getattr(attr, "_dummy_function", None):
+                print("Setting fn to ", attr)
                 fn = attr
 
         if fn:
@@ -105,7 +113,9 @@ def bootstrap(app):
 
                 def error(*msg: any, warn=False):
                     if warn:
-                        warnings.append({"info": " ".join(msg), "function": module_name})
+                        warnings.append(
+                            {"info": " ".join(msg), "function": module_name}
+                        )
                         return
                     errors.append({"info": " ".join(msg), "function": module_name})
 
@@ -113,8 +123,12 @@ def bootstrap(app):
                     fn = fn(error)
                 except Exception as e:
                     exc_type, exc_value, exc_traceback = sys.exc_info()
-                    errors.append({"info": f"Init raised an exception: {''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))}",
-                                   "function": module_name})
+                    errors.append(
+                        {
+                            "info": f"Init raised an exception: {''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))}",
+                            "function": module_name,
+                        }
+                    )
 
             if (getattr(fn, "Bootstrap", None)) is not None:
                 bootstraps.append({"class": fn, "name": module_name})
@@ -131,11 +145,11 @@ def bootstrap(app):
         print("ERROR: FUNCTIONS FAILED TO START\n\tCheck /docs for more info")
         app.description += """\n\n***Error: API Failed to start***\n"""
         for err in errors:
-            trace = err['info'].replace("\n", "\n\t\t")
+            trace = err["info"].replace("\n", "\n\t\t")
             app.description += f"\n\t[{err['function']}]: {trace}"
 
     if warnings:
         app.description += """\n\n***API Returned warnings***\n"""
         for err in warnings:
-            trace = err['info'].replace("\n", "\n\t\t")
+            trace = err["info"].replace("\n", "\n\t\t")
             app.description += f"\n\t[{err['function']}]: {trace}"

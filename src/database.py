@@ -3,7 +3,6 @@ import azure.cosmos.exceptions as exceptions
 from azure.cosmos.partition_key import PartitionKey
 
 import os
-
 from config import cfg
 
 

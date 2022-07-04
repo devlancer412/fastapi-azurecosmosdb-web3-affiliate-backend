@@ -313,9 +313,9 @@ class Affiliate(Function):
                 "redeem_codes": data.redeem_codes,
                 "total_value": format_price(total_value),
                 "signature": {
-                    "r": str(signature.r),
-                    "s": str(signature.s),
-                    "v": str(signature.v),
+                    "r": hex(signature.r),
+                    "s": hex(signature.s),
+                    "v": signature.v,
                 },
             }
 

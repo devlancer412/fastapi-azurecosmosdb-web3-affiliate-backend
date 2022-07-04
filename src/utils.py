@@ -75,14 +75,19 @@ def is_valid_affiliate_id(address: str, affiliate_id: str):
 
 def sign_for_redeem(address: str, redeem_codes: list[int], total_value):
     hashed = Web3.solidityKeccak(
-        ["address", "uint256[]", "uint256"],
-        [Web3.toChecksumAddress(address), redeem_codes, total_value],
+        ["address", "address", "uint256[]", "uint256"],
+        [
+            Web3.toChecksumAddress(address),
+            Web3.toChecksumAddress(address),
+            redeem_codes,
+            total_value,
+        ],
     )
-    eth_signed_message_hash = Web3.solidityKeccak(
-        ["string", "bytes32"], ["\x19Ethereum Signed Message:\n32", hashed]
-    )
+    # eth_signed_message_hash = Web3.solidityKeccak(
+    #     ["string", "bytes32"], ["\x19Ethereum Signed Message:\n32", hashed]
+    # )
 
-    message = encode_defunct(eth_signed_message_hash)
+    message = encode_defunct(hashed)
     return w3.eth.account.sign_message(message, private_key=PRIVATE_KEY)
 
 
